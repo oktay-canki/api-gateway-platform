@@ -1,0 +1,67 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27018:27017"
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    networks:
+      - backend
+
+  mock-backend:
+    build: ./mock-backend
+    container_name: mock-backend
+    restart: unless-stopped
+    ports:
+      - "4001:4001"
+    networks:
+      - backend
+
+  gateway-api:
+    build: ./gateway-api
+    container_name: gateway-api
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB_NAME: gateway
+      REDIS_URL: redis://redis:6379/15
+      MOCK_BACKEND_URL: http://mock-backend:4001
+    depends_on:
+      - redis
+      - mock-backend
+    networks:
+      - backend
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "4002:3000"
+    env_file:
+      - ./dashboard/.env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/gateway
+    depends_on:
+      - mongo
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  mongo_data:
