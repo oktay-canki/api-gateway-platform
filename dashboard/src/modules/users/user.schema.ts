@@ -1,20 +1,10 @@
 import { Schema } from "mongoose";
 
-import ITimestamps from "@/interfaces/ITimestamps";
 import { hashPassword } from "@/lib/crypto";
+import { PLANS } from "./user.types";
+import type { IUserDocument } from "./user.document";
 
-export const PLANS = ["free", "pro"] as const;
-
-export type Plan = (typeof PLANS)[number];
-
-export interface IUser extends ITimestamps {
-  name: string;
-  email: string;
-  passwordHash: string;
-  plan: Plan;
-}
-
-export const userSchema = new Schema<IUser>(
+export const userSchema = new Schema<IUserDocument>(
   {
     name: {
       type: String,

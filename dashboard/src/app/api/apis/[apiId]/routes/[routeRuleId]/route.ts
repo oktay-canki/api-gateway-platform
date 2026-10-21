@@ -1,8 +1,8 @@
 import { requireAuth } from "@/infrastructure/auth/require-auth";
 import { handleRequest } from "@/infrastructure/http/handle-request";
-
 import { RouteRuleController } from "@/modules/route-rules/route-rule.controller";
 import { RouteRuleService } from "@/modules/route-rules/route-rule.service";
+import { NextResponse } from "next/server";
 
 const routeRuleService = new RouteRuleService();
 const routeRuleController = new RouteRuleController(routeRuleService);

@@ -1,5 +1,6 @@
 import mongoose, { type Model } from "mongoose";
-import { apiSchema, type IApi } from "./api.schema";
+import { apiSchema } from "./api.schema";
+import type { IApiDocument } from "./api.document";
 
-export const Api: Model<IApi> =
-  mongoose.models.Api ?? mongoose.model<IApi>("Api", apiSchema);
+export const Api: Model<IApiDocument> =
+  mongoose.models.Api ?? mongoose.model<IApiDocument>("Api", apiSchema);

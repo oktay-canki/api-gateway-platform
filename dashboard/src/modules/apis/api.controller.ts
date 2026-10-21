@@ -71,4 +71,16 @@ export class ApiController {
       status: 204,
     });
   }
+
+  async regenerateApiKey(userId: string, apiId: string) {
+    const ret = await this.apiService.regenerateApiKey(userId, apiId);
+
+    return Response.json(
+      {
+        api: toApiResponse(ret.api),
+        key: ret.rawKey,
+      },
+      { status: 200 },
+    );
+  }
 }

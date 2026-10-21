@@ -1,13 +1,14 @@
+import { Types } from "mongoose";
+import type { HydratedDocument } from "mongoose";
+import type { IRouteRuleDocument } from "@/modules/route-rules/route-rule.document";
 import { RouteRule } from "@/modules/route-rules/route-rule.model";
-import { IRouteRule } from "@/modules/route-rules/route-rule.schema";
-import { CreateRouteRuleInput } from "@/modules/route-rules/route-rule.validation";
-import { HydratedDocument, Types } from "mongoose";
+import type { CreateRouteRuleInput } from "@/modules/route-rules/route-rule.validation";
 
 export function buildRouteRulePayload(
   overrides: Partial<CreateRouteRuleInput> = {},
 ): CreateRouteRuleInput {
   return {
-    routePattern: "/users/*",
+    routePattern: "/users/*path",
     allowedMethods: ["GET", "POST"],
     timeoutMs: 5_000,
     retryPolicy: {
@@ -23,15 +24,17 @@ export async function createRouteRules(
   data: {
     apiId: Types.ObjectId;
     routePattern: string;
+    overrides?: Partial<CreateRouteRuleInput>;
   }[],
 ) {
-  const ret: HydratedDocument<IRouteRule>[] = [];
+  const ret: HydratedDocument<IRouteRuleDocument>[] = [];
 
   for (const d of data) {
     const routeRule = await RouteRule.create({
       apiId: d.apiId,
       ...buildRouteRulePayload({
         routePattern: d.routePattern,
+        ...d.overrides,
       }),
     });
 

@@ -1,5 +1,5 @@
+import { HTTP_METHODS } from "@/modules/apis/api.types";
 import { z } from "zod";
-import { HTTP_METHODS } from "./api.schema";
 
 const slidingWindowRateLimitSchema = z.object({
   enabled: z.boolean().default(true),

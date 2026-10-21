@@ -1,7 +1,7 @@
-import mongoose, { type Model } from "mongoose";
+import { model, models } from "mongoose";
 
-import { routeRuleSchema, type IRouteRule } from "./route-rule.schema";
+import { routeRuleSchema } from "./route-rule.schema";
+import type { IRouteRuleDocument } from "./route-rule.document";
 
-export const RouteRule: Model<IRouteRule> =
-  mongoose.models.RouteRule ??
-  mongoose.model<IRouteRule>("RouteRule", routeRuleSchema);
+export const RouteRule =
+  models.RouteRule || model<IRouteRuleDocument>("RouteRule", routeRuleSchema);

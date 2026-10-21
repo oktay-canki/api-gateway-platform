@@ -1,13 +1,14 @@
 import type { HydratedDocument } from "mongoose";
-import type { IUser } from "./user.schema";
+import type { IUserDocument } from "./user.document";
+import type { UserResponse } from "./user.types";
 
-export function toUserResponse(user: HydratedDocument<IUser>) {
+export function toUserResponse(
+  user: HydratedDocument<IUserDocument>,
+): UserResponse {
   return {
     id: user._id.toString(),
     name: user.name,
     email: user.email,
     plan: user.plan,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
   };
 }

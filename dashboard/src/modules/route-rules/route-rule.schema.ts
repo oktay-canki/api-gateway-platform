@@ -1,30 +1,7 @@
-import { Schema, Types } from "mongoose";
+import { Schema } from "mongoose";
 
-import {
-  HTTP_METHODS,
-  RATE_LIMIT_ALGORITHMS,
-  RateLimit,
-  type HttpMethod,
-} from "../apis/api.schema";
-import ITimestamps from "@/interfaces/ITimestamps";
-
-export interface IRouteRule extends ITimestamps {
-  apiId: Types.ObjectId;
-
-  routePattern: string;
-
-  rateLimit?: RateLimit;
-
-  allowedMethods?: HttpMethod[];
-
-  timeoutMs?: number;
-
-  retryPolicy?: {
-    enabled: boolean;
-    maxRetries: number;
-    retryDelayMs: number;
-  };
-}
+import { HTTP_METHODS, RATE_LIMIT_ALGORITHMS } from "@/modules/apis/api.types";
+import type { IRouteRuleDocument } from "./route-rule.document";
 
 const rateLimitSchema = new Schema(
   {
@@ -34,7 +11,6 @@ const rateLimitSchema = new Schema(
       required: true,
     },
 
-    // Sliding window
     maxRequests: {
       type: Number,
       min: 1,
@@ -45,7 +21,6 @@ const rateLimitSchema = new Schema(
       min: 1,
     },
 
-    // Token bucket
     capacity: {
       type: Number,
       min: 1,
@@ -89,7 +64,7 @@ const retryPolicySchema = new Schema(
   },
 );
 
-export const routeRuleSchema = new Schema<IRouteRule>(
+export const routeRuleSchema = new Schema<IRouteRuleDocument>(
   {
     apiId: {
       type: Schema.Types.ObjectId,

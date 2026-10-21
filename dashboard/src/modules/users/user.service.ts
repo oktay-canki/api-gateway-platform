@@ -8,6 +8,9 @@ import {
 } from "@/modules/users/user.validation";
 import { JwtService } from "@/infrastructure/auth/jwt.service";
 import AppError from "@/infrastructure/errors/app-error";
+import { Plan } from "@/modules/users/user.types";
+import { RouteRule } from "@/modules/route-rules/route-rule.model";
+import { Api } from "@/modules/apis/api.model";
 
 export class UserService {
   constructor(private readonly jwtService: JwtService) {}
@@ -27,6 +30,7 @@ export class UserService {
       name: data.name,
       email: data.email,
       passwordHash: data.password,
+      plan: data.plan,
     });
 
     return user;
@@ -63,5 +67,33 @@ export class UserService {
     await connectDB();
 
     return User.findById(id);
+  }
+
+  async changePlan(userId: string, plan: Plan) {
+    await connectDB();
+
+    return User.findOneAndUpdate(
+      { _id: userId },
+      { $set: { plan } },
+      {
+        returnDocument: "after",
+        runValidators: true,
+      },
+    );
+  }
+
+  async deleteAccount(userId: string) {
+    await connectDB();
+
+    const apis = await Api.find({ userId }).select("_id");
+    const apiIds = apis.map((api) => api._id);
+
+    await RouteRule.deleteMany({
+      apiId: { $in: apiIds },
+    });
+
+    await Api.deleteMany({ userId });
+
+    return User.findByIdAndDelete(userId);
   }
 }

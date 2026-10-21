@@ -9,7 +9,9 @@ export function handleRequest(
     if (error instanceof ZodError) {
       return Response.json(
         {
-          message: "Validation failed",
+          message:
+            error.issues[0]?.message ??
+            "Please check the provided information.",
           errors: treeifyError(error),
         },
         { status: 400 },

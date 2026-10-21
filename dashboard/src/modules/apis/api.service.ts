@@ -1,13 +1,24 @@
 import mongoose, { Types } from "mongoose";
+
 import { connectDB } from "@/lib/db";
 import { Api } from "./api.model";
 import type { CreateApiInput, UpdateApiInput } from "./api.validation";
 import AppError from "@/infrastructure/errors/app-error";
 import { createApiKey, hashApiKey } from "@/lib/crypto";
+import { User } from "@/modules/users/user.model";
+import { validateRateLimitPlan } from "@/modules/subscriptions/plan-rules";
 
 export class ApiService {
   async create(userId: string, data: CreateApiInput) {
     await connectDB();
+
+    const user = await User.findById(userId).select("plan");
+
+    if (!user) {
+      throw new AppError("User not found.", 404);
+    }
+
+    validateRateLimitPlan(user.plan, data.rateLimit);
 
     try {
       const rawKey = "gw_live_" + createApiKey();
@@ -87,6 +98,14 @@ export class ApiService {
 
   async update(userId: string, apiId: string, data: UpdateApiInput) {
     await connectDB();
+
+    const user = await User.findById(userId).select("plan");
+
+    if (!user) {
+      throw new AppError("User not found.", 404);
+    }
+
+    validateRateLimitPlan(user.plan, data.rateLimit);
 
     return Api.findOneAndUpdate(
       {

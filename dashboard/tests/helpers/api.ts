@@ -1,11 +1,12 @@
+import { Types } from "mongoose";
+
 import { Api } from "@/modules/apis/api.model";
-import { IApi } from "@/modules/apis/api.schema";
-import { CreateApiInput } from "@/modules/apis/api.validation";
-import { HydratedDocument, Types } from "mongoose";
+import type { CreateApiInput } from "@/modules/apis/api.validation";
 import { createApiKey, hashApiKey } from "@/lib/crypto";
 
 export function buildApiKeyFields() {
   const rawKey = "gw_live_" + createApiKey();
+
   return {
     apiKeyHash: hashApiKey(rawKey),
     apiKeyPrefix: rawKey.slice(0, 14),
@@ -16,7 +17,6 @@ export function buildApiPayload(
   overrides: Partial<CreateApiInput> = {},
 ): CreateApiInput {
   return {
-    ...buildApiKeyFields(),
     name: "My API",
     baseUrl: "https://api.example.com",
     rateLimit: {
@@ -49,6 +49,7 @@ export async function createApis(
       const api = await Api.create({
         userId,
         ...buildApiPayload({ name, baseUrl }),
+        ...buildApiKeyFields(),
       });
 
       if (createdAt) {

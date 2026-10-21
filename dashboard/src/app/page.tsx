@@ -1,7 +1,5 @@
-export default function Home() {
-  return (
-    <div>
-      <main>Hello from Dashboard</main>
-    </div>
-  );
+import { redirect } from "next/navigation";
+
+export default function Page() {
+  redirect("/home");
 }
