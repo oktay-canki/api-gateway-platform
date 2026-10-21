@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { HydratedDocument } from "mongoose";
+import type { HydratedDocument } from "mongoose";
 
 import { GET } from "@/app/api/apis/route";
 import { Api } from "@/modules/apis/api.model";
+import type { IUserDocument } from "@/modules/users/user.document";
 import { User } from "@/modules/users/user.model";
-import { IUser } from "@/modules/users/user.schema";
 import { resetAuthMock, setupAuthenticatedUser } from "../../helpers/auth";
 import { createApis } from "../../helpers/api";
+import { createUser } from "../../helpers/user";
 
 describe("GET /api/apis", () => {
-  let user: HydratedDocument<IUser>;
+  let user: HydratedDocument<IUserDocument>;
 
   beforeEach(async () => {
     await Api.deleteMany({});
@@ -85,12 +86,7 @@ describe("GET /api/apis", () => {
   });
 
   it("does not return APIs belonging to another user", async () => {
-    const otherUser = await User.create({
-      name: "Other User",
-      email: "other@example.com",
-      passwordHash: "password",
-      plan: "free",
-    });
+    const otherUser = await createUser();
 
     const [myApi] = await createApis([
       {

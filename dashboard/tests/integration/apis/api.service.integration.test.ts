@@ -3,15 +3,25 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { ApiService } from "@/modules/apis/api.service";
 import { Api } from "@/modules/apis/api.model";
+import { User } from "@/modules/users/user.model";
+import { createApis } from "../../helpers/api";
+import { createUser } from "../../helpers/user";
 
 describe("ApiService integration", () => {
   const service = new ApiService();
 
-  const userId = new Types.ObjectId().toString();
-  const otherUserId = new Types.ObjectId().toString();
+  let userId: string;
+  let otherUserId: string;
 
   beforeEach(async () => {
     await Api.deleteMany({});
+    await User.deleteMany({});
+
+    const user = await createUser();
+    const otherUser = await createUser();
+
+    userId = user._id.toString();
+    otherUserId = otherUser._id.toString();
   });
 
   describe("create", () => {
@@ -38,13 +48,13 @@ describe("ApiService integration", () => {
 
       expect(result._id).toBeInstanceOf(Types.ObjectId);
       expect(result.userId.toString()).toBe(userId);
-      expect(result.name).toBe("Users API");
+      expect(result.name).toBe(data.name);
       expect(result.baseUrl).toBe(data.baseUrl);
 
       const storedApi = await Api.findById(result._id);
 
       expect(storedApi).not.toBeNull();
-      expect(storedApi!.name).toBe("Users API");
+      expect(storedApi!.name).toBe(data.name);
       expect(storedApi!.userId.toString()).toBe(userId);
     });
 
@@ -100,45 +110,83 @@ describe("ApiService integration", () => {
       expect(first.userId.toString()).toBe(userId);
       expect(second.userId.toString()).toBe(otherUserId);
     });
+
+    it("rejects token-bucket rate limiting for a Free user", async () => {
+      const data = {
+        name: "Users API",
+        baseUrl: "https://api.example.com",
+        rateLimit: {
+          enabled: true,
+          algorithm: "token-bucket" as const,
+          capacity: 100,
+          refillRate: 10,
+          refillIntervalMs: 1_000,
+        },
+        allowedMethods: ["GET" as const],
+        timeoutMs: 5_000,
+        retryPolicy: {
+          enabled: false,
+          maxRetries: 3,
+          retryDelayMs: 500,
+        },
+      };
+
+      await expect(service.create(userId, data)).rejects.toMatchObject({
+        message: "Token bucket rate limiting requires a Pro plan.",
+        statusCode: 403,
+      });
+
+      expect(await Api.countDocuments()).toBe(0);
+    });
+
+    it("allows token-bucket rate limiting for a Pro user", async () => {
+      const user = await User.findByIdAndUpdate(
+        userId,
+        { plan: "pro" },
+        { returnDocument: "after" },
+      );
+
+      expect(user).not.toBeNull();
+
+      const data = {
+        name: "Users API",
+        baseUrl: "https://api.example.com",
+        rateLimit: {
+          enabled: true,
+          algorithm: "token-bucket" as const,
+          capacity: 100,
+          refillRate: 10,
+          refillIntervalMs: 1_000,
+        },
+        allowedMethods: ["GET" as const],
+        timeoutMs: 5_000,
+        retryPolicy: {
+          enabled: false,
+          maxRetries: 3,
+          retryDelayMs: 500,
+        },
+      };
+
+      const { api } = await service.create(userId, data);
+
+      expect(api.rateLimit.algorithm).toBe("token-bucket");
+    });
   });
 
   describe("findAllByUserId", () => {
     it("returns only APIs belonging to the user", async () => {
-      await service.create(userId, {
-        name: "API 1",
-        baseUrl: "https://api-one.example.com",
-        rateLimit: {
-          enabled: true,
-          algorithm: "sliding-window",
-          maxRequests: 100,
-          windowMs: 60_000,
+      await createApis([
+        {
+          userId: new Types.ObjectId(userId),
+          name: "API 1",
+          baseUrl: "https://api-one.example.com",
         },
-        allowedMethods: ["GET"],
-        timeoutMs: 5_000,
-        retryPolicy: {
-          enabled: false,
-          maxRetries: 3,
-          retryDelayMs: 500,
+        {
+          userId: new Types.ObjectId(otherUserId),
+          name: "API 2",
+          baseUrl: "https://api-two.example.com",
         },
-      });
-
-      await service.create(otherUserId, {
-        name: "API 2",
-        baseUrl: "https://api-two.example.com",
-        rateLimit: {
-          enabled: true,
-          algorithm: "sliding-window",
-          maxRequests: 100,
-          windowMs: 60_000,
-        },
-        allowedMethods: ["GET"],
-        timeoutMs: 5_000,
-        retryPolicy: {
-          enabled: false,
-          maxRetries: 3,
-          retryDelayMs: 500,
-        },
-      });
+      ]);
 
       const result = await service.findAllByUserId(userId);
 
@@ -150,23 +198,13 @@ describe("ApiService integration", () => {
 
   describe("findById", () => {
     it("returns an API belonging to the user", async () => {
-      const { api } = await service.create(userId, {
-        name: "Users API",
-        baseUrl: "https://api.example.com",
-        rateLimit: {
-          enabled: true,
-          algorithm: "sliding-window",
-          maxRequests: 100,
-          windowMs: 60_000,
+      const [api] = await createApis([
+        {
+          userId: new Types.ObjectId(userId),
+          name: "Users API",
+          baseUrl: "https://api.example.com",
         },
-        allowedMethods: ["GET"],
-        timeoutMs: 5_000,
-        retryPolicy: {
-          enabled: false,
-          maxRetries: 3,
-          retryDelayMs: 500,
-        },
-      });
+      ]);
 
       const result = await service.findById(userId, api._id.toString());
 
@@ -175,23 +213,13 @@ describe("ApiService integration", () => {
     });
 
     it("does not return an API belonging to another user", async () => {
-      const { api } = await service.create(userId, {
-        name: "Users API",
-        baseUrl: "https://api.example.com",
-        rateLimit: {
-          enabled: true,
-          algorithm: "sliding-window",
-          maxRequests: 100,
-          windowMs: 60_000,
+      const [api] = await createApis([
+        {
+          userId: new Types.ObjectId(userId),
+          name: "Users API",
+          baseUrl: "https://api.example.com",
         },
-        allowedMethods: ["GET"],
-        timeoutMs: 5_000,
-        retryPolicy: {
-          enabled: false,
-          maxRetries: 3,
-          retryDelayMs: 500,
-        },
-      });
+      ]);
 
       const result = await service.findById(otherUserId, api._id.toString());
 
@@ -201,23 +229,13 @@ describe("ApiService integration", () => {
 
   describe("update", () => {
     it("updates and persists an API", async () => {
-      const { api } = await service.create(userId, {
-        name: "Users API",
-        baseUrl: "https://api.example.com",
-        rateLimit: {
-          enabled: true,
-          algorithm: "sliding-window",
-          maxRequests: 100,
-          windowMs: 60_000,
+      const [api] = await createApis([
+        {
+          userId: new Types.ObjectId(userId),
+          name: "Users API",
+          baseUrl: "https://api.example.com",
         },
-        allowedMethods: ["GET"],
-        timeoutMs: 5_000,
-        retryPolicy: {
-          enabled: false,
-          maxRetries: 3,
-          retryDelayMs: 500,
-        },
-      });
+      ]);
 
       const result = await service.update(userId, api._id.toString(), {
         name: "Updated Users API",
@@ -230,6 +248,7 @@ describe("ApiService integration", () => {
 
       const storedApi = await Api.findById(api._id);
 
+      expect(storedApi).not.toBeNull();
       expect(storedApi!.name).toBe("Updated Users API");
       expect(storedApi!.timeoutMs).toBe(10_000);
     });
@@ -237,23 +256,13 @@ describe("ApiService integration", () => {
 
   describe("delete", () => {
     it("deletes an API belonging to the user", async () => {
-      const { api } = await service.create(userId, {
-        name: "Users API",
-        baseUrl: "https://api.example.com",
-        rateLimit: {
-          enabled: true,
-          algorithm: "sliding-window",
-          maxRequests: 100,
-          windowMs: 60_000,
+      const [api] = await createApis([
+        {
+          userId: new Types.ObjectId(userId),
+          name: "Users API",
+          baseUrl: "https://api.example.com",
         },
-        allowedMethods: ["GET"],
-        timeoutMs: 5_000,
-        retryPolicy: {
-          enabled: false,
-          maxRetries: 3,
-          retryDelayMs: 500,
-        },
-      });
+      ]);
 
       const result = await service.delete(userId, api._id.toString());
 

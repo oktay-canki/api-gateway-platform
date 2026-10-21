@@ -107,6 +107,41 @@ describe("createRouteRuleSchema", () => {
       });
     }
   });
+
+  it("rejects an invalid token-bucket configuration", () => {
+    const result = createRouteRuleSchema.safeParse({
+      routePattern: "/users",
+      rateLimit: {
+        algorithm: "token-bucket",
+        capacity: 0,
+        refillRate: 10,
+        refillIntervalMs: 1_000,
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an invalid sliding-window configuration", () => {
+    const result = createRouteRuleSchema.safeParse({
+      routePattern: "/users",
+      rateLimit: {
+        algorithm: "sliding-window",
+        maxRequests: 100,
+        windowMs: 0,
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a named wildcard route pattern", () => {
+    const result = createRouteRuleSchema.safeParse({
+      routePattern: "/users/*path",
+    });
+
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("updateRouteRuleSchema", () => {

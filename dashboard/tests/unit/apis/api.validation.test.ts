@@ -148,4 +148,17 @@ describe("updateApiSchema", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it("accepts a token-bucket update", () => {
+    const result = updateApiSchema.safeParse({
+      rateLimit: {
+        algorithm: "token-bucket",
+        capacity: 100,
+        refillRate: 10,
+        refillIntervalMs: 1_000,
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
 });

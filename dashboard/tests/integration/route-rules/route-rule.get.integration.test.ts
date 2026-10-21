@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { HydratedDocument } from "mongoose";
+import type { HydratedDocument } from "mongoose";
 
 import { GET } from "@/app/api/apis/[apiId]/routes/[routeRuleId]/route";
 import { Api } from "@/modules/apis/api.model";
-import { IApi } from "@/modules/apis/api.schema";
 import { RouteRule } from "@/modules/route-rules/route-rule.model";
 import { User } from "@/modules/users/user.model";
-import { IUser } from "@/modules/users/user.schema";
+import type { IApiDocument } from "@/modules/apis/api.document";
+import type { IUserDocument } from "@/modules/users/user.document";
+
 import { resetAuthMock, setupAuthenticatedUser } from "../../helpers/auth";
-import { buildApiPayload } from "../../helpers/api";
+import { buildApiKeyFields, buildApiPayload } from "../../helpers/api";
 import {
   buildRouteRulePayload,
   createRouteRules,
@@ -16,8 +17,8 @@ import {
 import { createJsonRequest } from "../../helpers/request";
 
 describe("GET /api/apis/:apiId/routes/:routeRuleId", () => {
-  let user: HydratedDocument<IUser>;
-  let api: HydratedDocument<IApi>;
+  let user: HydratedDocument<IUserDocument>;
+  let api: HydratedDocument<IApiDocument>;
 
   beforeEach(async () => {
     await RouteRule.deleteMany({});
@@ -31,6 +32,7 @@ describe("GET /api/apis/:apiId/routes/:routeRuleId", () => {
     api = await Api.create({
       userId: user._id,
       ...buildApiPayload(),
+      ...buildApiKeyFields(),
     });
   });
 
@@ -76,6 +78,7 @@ describe("GET /api/apis/:apiId/routes/:routeRuleId", () => {
           name: "Other API",
           baseUrl: "https://other.example.com",
         }),
+        ...buildApiKeyFields(),
       },
     ]);
 

@@ -1,12 +1,11 @@
 import argon2 from "argon2";
 import { Types } from "mongoose";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import { connectDB } from "@/lib/db";
 import AppError from "@/infrastructure/errors/app-error";
+import { JwtService } from "@/infrastructure/auth/jwt.service";
 import { User } from "@/modules/users/user.model";
 import { UserService } from "@/modules/users/user.service";
-import { JwtService } from "@/infrastructure/auth/jwt.service";
 
 vi.mock("@/lib/db", () => ({
   connectDB: vi.fn(),
@@ -40,6 +39,7 @@ describe("UserService", () => {
     name: "John Doe",
     email: "john@example.com",
     passwordHash: "hashed-password",
+    plan: "free" as const,
   };
 
   beforeEach(() => {
@@ -51,6 +51,7 @@ describe("UserService", () => {
       name: "John Doe",
       email: "john@example.com",
       password: "password123",
+      plan: "free" as const,
     };
 
     it("creates a user when the email is not already registered", async () => {
@@ -69,6 +70,7 @@ describe("UserService", () => {
         name: data.name,
         email: data.email,
         passwordHash: data.password,
+        plan: data.plan,
       });
 
       expect(result).toBe(user);

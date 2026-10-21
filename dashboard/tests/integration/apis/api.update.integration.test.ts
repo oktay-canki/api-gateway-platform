@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { HydratedDocument } from "mongoose";
-
+import type { HydratedDocument } from "mongoose";
 import { PATCH } from "@/app/api/apis/[apiId]/route";
 import { Api } from "@/modules/apis/api.model";
+import type { IApiDocument } from "@/modules/apis/api.document";
+import type { IUserDocument } from "@/modules/users/user.document";
 import { User } from "@/modules/users/user.model";
-import { IUser } from "@/modules/users/user.schema";
 import { resetAuthMock, setupAuthenticatedUser } from "../../helpers/auth";
+import { buildApiKeyFields, buildApiPayload } from "../../helpers/api";
 import { createJsonRequest } from "../../helpers/request";
-import { IApi } from "@/modules/apis/api.schema";
-import { buildApiPayload } from "../../helpers/api";
+import { createUser } from "../../helpers/user";
 
 describe("PATCH /api/apis/:apiId", () => {
-  let user: HydratedDocument<IUser>;
-  let api: HydratedDocument<IApi>;
+  let user: HydratedDocument<IUserDocument>;
+  let api: HydratedDocument<IApiDocument>;
 
   beforeEach(async () => {
     await Api.deleteMany({});
@@ -21,7 +21,11 @@ describe("PATCH /api/apis/:apiId", () => {
 
     user = await setupAuthenticatedUser();
 
-    api = await Api.create({ userId: user.id, ...buildApiPayload() });
+    api = await Api.create({
+      userId: user._id,
+      ...buildApiPayload(),
+      ...buildApiKeyFields(),
+    });
   });
 
   it("updates an API", async () => {
@@ -56,7 +60,42 @@ describe("PATCH /api/apis/:apiId", () => {
     expect(updatedApi?.timeoutMs).toBe(10_000);
   });
 
-  it("updates the rate limit configuration", async () => {
+  it("rejects token-bucket updates for free users", async () => {
+    const request = createJsonRequest(`http://localhost/api/apis/${api._id}`, {
+      method: "PATCH",
+      body: {
+        rateLimit: {
+          enabled: true,
+          algorithm: "token-bucket",
+          capacity: 200,
+          refillRate: 20,
+          refillIntervalMs: 1_000,
+        },
+      },
+    });
+
+    const response = await PATCH(request, {
+      params: Promise.resolve({ apiId: api._id.toString() }),
+    });
+
+    expect(response.status).toBe(403);
+
+    const body = await response.json();
+
+    expect(body.message).toBe(
+      "Token bucket rate limiting requires a Pro plan.",
+    );
+
+    const updatedApi = await Api.findById(api._id);
+
+    expect(updatedApi?.rateLimit.algorithm).not.toBe("token-bucket");
+  });
+
+  it("updates the rate limit configuration for Pro users", async () => {
+    await User.findByIdAndUpdate(user._id, {
+      plan: "pro",
+    });
+
     const request = createJsonRequest(`http://localhost/api/apis/${api._id}`, {
       method: "PATCH",
       body: {
@@ -209,16 +248,12 @@ describe("PATCH /api/apis/:apiId", () => {
   });
 
   it("rejects updating an API belonging to another user", async () => {
-    const otherUser = await User.create({
-      name: "Other User",
-      email: "other@example.com",
-      passwordHash: "password",
-      plan: "free",
-    });
+    const otherUser = await createUser();
 
     const otherApi = await Api.create({
       userId: otherUser._id,
       ...buildApiPayload(),
+      ...buildApiKeyFields(),
     });
 
     const request = createJsonRequest(

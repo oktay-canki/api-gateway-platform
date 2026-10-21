@@ -79,8 +79,8 @@ describe("toApiResponse", () => {
         maxRetries: 3,
         retryDelayMs: 500,
       },
-      createdAt,
-      updatedAt,
+      createdAt: createdAt.toISOString(),
+      updatedAt: updatedAt.toISOString(),
     });
   });
 

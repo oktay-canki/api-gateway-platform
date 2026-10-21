@@ -1,24 +1,15 @@
-import { toRouteRuleResponse } from "@/modules/route-rules/route-rule.mapper";
 import { Types } from "mongoose";
 import { describe, expect, it } from "vitest";
+
+import { toRouteRuleResponse } from "@/modules/route-rules/route-rule.mapper";
+import type { HttpMethod, RateLimit } from "@/modules/apis/api.types";
 
 type RouteRuleMapperInput = {
   _id: Types.ObjectId;
   apiId: Types.ObjectId;
   routePattern: string;
-  rateLimit?:
-    | {
-        algorithm: "sliding-window";
-        maxRequests: number;
-        windowMs: number;
-      }
-    | {
-        algorithm: "token-bucket";
-        capacity: number;
-        refillRate: number;
-        refillIntervalMs: number;
-      };
-  allowedMethods?: string[];
+  rateLimit?: RateLimit;
+  allowedMethods?: HttpMethod[];
   timeoutMs?: number;
   retryPolicy?: {
     enabled: boolean;
@@ -77,8 +68,8 @@ describe("toRouteRuleResponse", () => {
         maxRetries: 3,
         retryDelayMs: 500,
       },
-      createdAt,
-      updatedAt,
+      createdAt: createdAt.toISOString(),
+      updatedAt: updatedAt.toISOString(),
     });
   });
 
@@ -103,8 +94,8 @@ describe("toRouteRuleResponse", () => {
       allowedMethods: undefined,
       timeoutMs: undefined,
       retryPolicy: undefined,
-      createdAt: routeRule.createdAt,
-      updatedAt: routeRule.updatedAt,
+      createdAt: routeRule.createdAt.toISOString(),
+      updatedAt: routeRule.updatedAt.toISOString(),
     });
   });
 });

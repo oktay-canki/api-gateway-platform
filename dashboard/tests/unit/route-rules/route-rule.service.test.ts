@@ -6,6 +6,7 @@ import AppError from "@/infrastructure/errors/app-error";
 import { RouteRuleService } from "@/modules/route-rules/route-rule.service";
 import { Api } from "@/modules/apis/api.model";
 import { RouteRule } from "@/modules/route-rules/route-rule.model";
+import { User } from "@/modules/users/user.model";
 
 vi.mock("@/lib/db", () => ({
   connectDB: vi.fn(),
@@ -14,6 +15,12 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/modules/apis/api.model", () => ({
   Api: {
     findOne: vi.fn(),
+  },
+}));
+
+vi.mock("@/modules/users/user.model", () => ({
+  User: {
+    findById: vi.fn(),
   },
 }));
 
@@ -61,13 +68,20 @@ describe("RouteRuleService", () => {
         userId: new Types.ObjectId(userId),
       };
 
+      const user = {
+        plan: "free",
+      };
+
       const routeRule = {
         _id: new Types.ObjectId(routeRuleId),
         apiId: new Types.ObjectId(apiId),
         ...data,
       };
 
+      const select = vi.fn().mockResolvedValue(user);
+
       vi.mocked(Api.findOne).mockResolvedValue(api as never);
+      vi.mocked(User.findById).mockReturnValue({ select } as never);
       vi.mocked(RouteRule.create).mockResolvedValue(routeRule as never);
 
       const result = await service.create(userId, apiId, data);
@@ -78,6 +92,9 @@ describe("RouteRuleService", () => {
         _id: apiId,
         userId,
       });
+
+      expect(User.findById).toHaveBeenCalledWith(userId);
+      expect(select).toHaveBeenCalledWith("plan");
 
       expect(RouteRule.create).toHaveBeenCalledWith({
         apiId: new Types.ObjectId(apiId),
@@ -95,6 +112,81 @@ describe("RouteRuleService", () => {
       );
 
       expect(RouteRule.create).not.toHaveBeenCalled();
+      expect(User.findById).not.toHaveBeenCalled();
+    });
+
+    it("rejects token-bucket rate limiting for Free users", async () => {
+      const api = {
+        _id: new Types.ObjectId(apiId),
+        userId: new Types.ObjectId(userId),
+      };
+
+      const user = {
+        plan: "free",
+      };
+
+      const data = {
+        routePattern: "/users/:id",
+        rateLimit: {
+          algorithm: "token-bucket" as const,
+          capacity: 100,
+          refillRate: 10,
+          refillIntervalMs: 1_000,
+        },
+      };
+
+      const select = vi.fn().mockResolvedValue(user);
+
+      vi.mocked(Api.findOne).mockResolvedValue(api as never);
+      vi.mocked(User.findById).mockReturnValue({ select } as never);
+
+      await expect(service.create(userId, apiId, data)).rejects.toEqual(
+        new AppError("Token bucket rate limiting requires a Pro plan.", 403),
+      );
+
+      expect(RouteRule.create).not.toHaveBeenCalled();
+    });
+
+    it("allows token-bucket rate limiting for Pro users", async () => {
+      const api = {
+        _id: new Types.ObjectId(apiId),
+        userId: new Types.ObjectId(userId),
+      };
+
+      const user = {
+        plan: "pro",
+      };
+
+      const data = {
+        routePattern: "/users/:id",
+        rateLimit: {
+          algorithm: "token-bucket" as const,
+          capacity: 100,
+          refillRate: 10,
+          refillIntervalMs: 1_000,
+        },
+      };
+
+      const routeRule = {
+        _id: new Types.ObjectId(routeRuleId),
+        apiId: new Types.ObjectId(apiId),
+        ...data,
+      };
+
+      const select = vi.fn().mockResolvedValue(user);
+
+      vi.mocked(Api.findOne).mockResolvedValue(api as never);
+      vi.mocked(User.findById).mockReturnValue({ select } as never);
+      vi.mocked(RouteRule.create).mockResolvedValue(routeRule as never);
+
+      const result = await service.create(userId, apiId, data);
+
+      expect(RouteRule.create).toHaveBeenCalledWith({
+        apiId: new Types.ObjectId(apiId),
+        ...data,
+      });
+
+      expect(result).toBe(routeRule);
     });
   });
 
@@ -200,6 +292,91 @@ describe("RouteRuleService", () => {
       };
 
       vi.mocked(Api.findOne).mockResolvedValue(api as never);
+      vi.mocked(RouteRule.findOneAndUpdate).mockResolvedValue(
+        updatedRouteRule as never,
+      );
+
+      const result = await service.update(userId, apiId, routeRuleId, data);
+
+      expect(RouteRule.findOneAndUpdate).toHaveBeenCalledWith(
+        {
+          _id: routeRuleId,
+          apiId,
+        },
+        {
+          $set: data,
+        },
+        {
+          returnDocument: "after",
+          runValidators: true,
+        },
+      );
+
+      expect(result).toBe(updatedRouteRule);
+    });
+
+    it("rejects token-bucket rate limiting for Free users", async () => {
+      const api = {
+        _id: new Types.ObjectId(apiId),
+        userId: new Types.ObjectId(userId),
+      };
+
+      const user = {
+        plan: "free",
+      };
+
+      const data = {
+        rateLimit: {
+          algorithm: "token-bucket" as const,
+          capacity: 100,
+          refillRate: 10,
+          refillIntervalMs: 1_000,
+        },
+      };
+
+      const select = vi.fn().mockResolvedValue(user);
+
+      vi.mocked(Api.findOne).mockResolvedValue(api as never);
+      vi.mocked(User.findById).mockReturnValue({ select } as never);
+
+      await expect(
+        service.update(userId, apiId, routeRuleId, data),
+      ).rejects.toEqual(
+        new AppError("Token bucket rate limiting requires a Pro plan.", 403),
+      );
+
+      expect(RouteRule.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it("allows token-bucket rate limiting for Pro users", async () => {
+      const api = {
+        _id: new Types.ObjectId(apiId),
+        userId: new Types.ObjectId(userId),
+      };
+
+      const user = {
+        plan: "pro",
+      };
+
+      const data = {
+        rateLimit: {
+          algorithm: "token-bucket" as const,
+          capacity: 100,
+          refillRate: 10,
+          refillIntervalMs: 1_000,
+        },
+      };
+
+      const updatedRouteRule = {
+        _id: new Types.ObjectId(routeRuleId),
+        apiId: new Types.ObjectId(apiId),
+        ...data,
+      };
+
+      const select = vi.fn().mockResolvedValue(user);
+
+      vi.mocked(Api.findOne).mockResolvedValue(api as never);
+      vi.mocked(User.findById).mockReturnValue({ select } as never);
       vi.mocked(RouteRule.findOneAndUpdate).mockResolvedValue(
         updatedRouteRule as never,
       );

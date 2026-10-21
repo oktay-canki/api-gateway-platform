@@ -1,23 +1,24 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { HydratedDocument } from "mongoose";
+import type { HydratedDocument } from "mongoose";
 
 import { GET } from "@/app/api/apis/[apiId]/routes/route";
 import { Api } from "@/modules/apis/api.model";
 import { RouteRule } from "@/modules/route-rules/route-rule.model";
 import { User } from "@/modules/users/user.model";
-import { IUser } from "@/modules/users/user.schema";
 import { resetAuthMock, setupAuthenticatedUser } from "../../helpers/auth";
-import { buildApiPayload } from "../../helpers/api";
+import { buildApiKeyFields, buildApiPayload } from "../../helpers/api";
 import {
   buildRouteRulePayload,
   createRouteRules,
 } from "../../helpers/route-rule";
 import { createJsonRequest } from "../../helpers/request";
-import { IApi } from "@/modules/apis/api.schema";
+import type { IApiDocument } from "@/modules/apis/api.document";
+import type { IUserDocument } from "@/modules/users/user.document";
+import { createUser } from "../../helpers/user";
 
 describe("GET /api/apis/:apiId/routes", () => {
-  let user: HydratedDocument<IUser>;
-  let api: HydratedDocument<IApi>;
+  let user: HydratedDocument<IUserDocument>;
+  let api: HydratedDocument<IApiDocument>;
 
   beforeEach(async () => {
     await RouteRule.deleteMany({});
@@ -31,6 +32,7 @@ describe("GET /api/apis/:apiId/routes", () => {
     api = await Api.create({
       userId: user._id,
       ...buildApiPayload(),
+      ...buildApiKeyFields(),
     });
   });
 
@@ -89,6 +91,7 @@ describe("GET /api/apis/:apiId/routes", () => {
           name: "Other API",
           baseUrl: "https://other.example.com",
         }),
+        ...buildApiKeyFields(),
       },
     ]);
 
@@ -149,12 +152,7 @@ describe("GET /api/apis/:apiId/routes", () => {
   });
 
   it("rejects access to another user's API", async () => {
-    const otherUser = await User.create({
-      name: "Other User",
-      email: "other@example.com",
-      passwordHash: "password",
-      plan: "free",
-    });
+    const otherUser = await createUser();
 
     const otherApi = await Api.create({
       userId: otherUser._id,
@@ -162,6 +160,7 @@ describe("GET /api/apis/:apiId/routes", () => {
         name: "Other API",
         baseUrl: "https://other.example.com",
       }),
+      ...buildApiKeyFields(),
     });
 
     await createRouteRules([

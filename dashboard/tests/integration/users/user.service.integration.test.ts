@@ -24,11 +24,13 @@ describe("UserService integration", () => {
         name: "John Doe",
         email: "john@example.com",
         password: "password123",
+        plan: "pro",
       });
 
       expect(result._id).toBeInstanceOf(Types.ObjectId);
       expect(result.name).toBe("John Doe");
       expect(result.email).toBe("john@example.com");
+      expect(result.plan).toBe("pro");
 
       // passwordHash should not contain the plain-text password.
       expect(result.passwordHash).not.toBe("password123");
@@ -43,6 +45,7 @@ describe("UserService integration", () => {
       }).select("+passwordHash");
 
       expect(storedUser).not.toBeNull();
+      expect(storedUser!.plan).toBe("pro");
       expect(storedUser!.passwordHash).not.toBe("password123");
 
       expect(await argon2.verify(storedUser!.passwordHash, "password123")).toBe(
@@ -55,6 +58,7 @@ describe("UserService integration", () => {
         name: "John Doe",
         email: "john@example.com",
         password: "password123",
+        plan: "free" as const,
       };
 
       await service.register(data);
@@ -74,6 +78,7 @@ describe("UserService integration", () => {
         name: "John Doe",
         email: "john@example.com",
         password: "password123",
+        plan: "free",
       });
 
       const token = "test-jwt-token";
@@ -97,6 +102,7 @@ describe("UserService integration", () => {
         name: "John Doe",
         email: "john@example.com",
         password: "password123",
+        plan: "free",
       });
 
       await expect(
@@ -119,6 +125,7 @@ describe("UserService integration", () => {
         name: "John Doe",
         email: "john@example.com",
         password: "password123",
+        plan: "free",
       });
 
       const result = await service.findById(user._id.toString());
@@ -126,6 +133,13 @@ describe("UserService integration", () => {
       expect(result).not.toBeNull();
       expect(result!._id.toString()).toBe(user._id.toString());
       expect(result!.email).toBe("john@example.com");
+      expect(result!.plan).toBe("free");
+    });
+
+    it("returns null for a non-existent user", async () => {
+      const result = await service.findById(new Types.ObjectId().toString());
+
+      expect(result).toBeNull();
     });
   });
 });

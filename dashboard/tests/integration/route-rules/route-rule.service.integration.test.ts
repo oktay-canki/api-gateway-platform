@@ -1,25 +1,30 @@
 import { Types } from "mongoose";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { CreateRouteRuleInput } from "@/modules/route-rules/route-rule.validation";
 
 import { Api } from "@/modules/apis/api.model";
 import { RouteRule } from "@/modules/route-rules/route-rule.model";
 import { RouteRuleService } from "@/modules/route-rules/route-rule.service";
-import { buildApiPayload } from "../../helpers/api";
+import { User } from "@/modules/users/user.model";
+import { buildApiKeyFields, buildApiPayload } from "../../helpers/api";
+import { createUser } from "../../helpers/user";
 
 describe("RouteRuleService integration", () => {
   const service = new RouteRuleService();
 
-  const userId = new Types.ObjectId().toString();
-  const otherUserId = new Types.ObjectId().toString();
+  let userId: string;
+  let otherUserId: string;
 
-  const createRouteRuleData = (overrides = {}) => ({
+  const createRouteRuleData = (
+    overrides: Partial<CreateRouteRuleInput> = {},
+  ): CreateRouteRuleInput => ({
     routePattern: "/users/:id",
     rateLimit: {
-      algorithm: "sliding-window" as const,
+      algorithm: "sliding-window",
       maxRequests: 50,
       windowMs: 60_000,
     },
-    allowedMethods: ["GET" as const],
+    allowedMethods: ["GET"],
     timeoutMs: 3_000,
     retryPolicy: {
       enabled: true,
@@ -32,6 +37,13 @@ describe("RouteRuleService integration", () => {
   beforeEach(async () => {
     await RouteRule.deleteMany({});
     await Api.deleteMany({});
+    await User.deleteMany({});
+
+    const user = await createUser();
+    const otherUser = await createUser();
+
+    userId = user._id.toString();
+    otherUserId = otherUser._id.toString();
   });
 
   describe("create", () => {
@@ -39,6 +51,7 @@ describe("RouteRuleService integration", () => {
       const api = await Api.create({
         userId: new Types.ObjectId(userId),
         ...buildApiPayload(),
+        ...buildApiKeyFields(),
       });
 
       const result = await service.create(
@@ -62,6 +75,7 @@ describe("RouteRuleService integration", () => {
       const api = await Api.create({
         userId: new Types.ObjectId(otherUserId),
         ...buildApiPayload(),
+        ...buildApiKeyFields(),
       });
 
       await expect(
@@ -73,6 +87,65 @@ describe("RouteRuleService integration", () => {
 
       expect(await RouteRule.countDocuments()).toBe(0);
     });
+
+    it("rejects token-bucket rate limiting for a Free user", async () => {
+      const api = await Api.create({
+        userId: new Types.ObjectId(userId),
+        ...buildApiPayload(),
+        ...buildApiKeyFields(),
+      });
+
+      await expect(
+        service.create(
+          userId,
+          api._id.toString(),
+          createRouteRuleData({
+            rateLimit: {
+              algorithm: "token-bucket",
+              capacity: 100,
+              refillRate: 10,
+              refillIntervalMs: 1_000,
+            },
+          }),
+        ),
+      ).rejects.toMatchObject({
+        message: "Token bucket rate limiting requires a Pro plan.",
+        statusCode: 403,
+      });
+
+      expect(await RouteRule.countDocuments()).toBe(0);
+    });
+
+    it("allows token-bucket rate limiting for a Pro user", async () => {
+      const user = await User.findByIdAndUpdate(
+        userId,
+        { plan: "pro" },
+        { returnDocument: "after" },
+      );
+
+      expect(user).not.toBeNull();
+
+      const api = await Api.create({
+        userId: new Types.ObjectId(userId),
+        ...buildApiPayload(),
+        ...buildApiKeyFields(),
+      });
+
+      const result = await service.create(
+        userId,
+        api._id.toString(),
+        createRouteRuleData({
+          rateLimit: {
+            algorithm: "token-bucket",
+            capacity: 100,
+            refillRate: 10,
+            refillIntervalMs: 1_000,
+          },
+        }),
+      );
+
+      expect(result.rateLimit?.algorithm).toBe("token-bucket");
+    });
   });
 
   describe("findAllByApi", () => {
@@ -80,6 +153,7 @@ describe("RouteRuleService integration", () => {
       const api = await Api.create({
         userId: new Types.ObjectId(userId),
         ...buildApiPayload(),
+        ...buildApiKeyFields(),
       });
 
       await service.create(
@@ -110,6 +184,7 @@ describe("RouteRuleService integration", () => {
       const api = await Api.create({
         userId: new Types.ObjectId(otherUserId),
         ...buildApiPayload(),
+        ...buildApiKeyFields(),
       });
 
       await expect(
@@ -126,6 +201,7 @@ describe("RouteRuleService integration", () => {
       const api = await Api.create({
         userId: new Types.ObjectId(userId),
         ...buildApiPayload(),
+        ...buildApiKeyFields(),
       });
 
       const routeRule = await service.create(
@@ -148,6 +224,7 @@ describe("RouteRuleService integration", () => {
       const api = await Api.create({
         userId: new Types.ObjectId(userId),
         ...buildApiPayload(),
+        ...buildApiKeyFields(),
       });
 
       const routeRule = await service.create(
@@ -174,6 +251,7 @@ describe("RouteRuleService integration", () => {
       const api = await Api.create({
         userId: new Types.ObjectId(userId),
         ...buildApiPayload(),
+        ...buildApiKeyFields(),
       });
 
       const routeRule = await service.create(
@@ -205,6 +283,7 @@ describe("RouteRuleService integration", () => {
       const api = await Api.create({
         userId: new Types.ObjectId(userId),
         ...buildApiPayload(),
+        ...buildApiKeyFields(),
       });
 
       const routeRule = await RouteRule.create({
@@ -228,6 +307,34 @@ describe("RouteRuleService integration", () => {
 
       expect(routeRule.routePattern).toBe("/users/:id");
     });
+
+    it("rejects token-bucket rate limiting for a Free user", async () => {
+      const api = await Api.create({
+        userId: new Types.ObjectId(userId),
+        ...buildApiPayload(),
+        ...buildApiKeyFields(),
+      });
+
+      const routeRule = await service.create(
+        userId,
+        api._id.toString(),
+        createRouteRuleData(),
+      );
+
+      await expect(
+        service.update(userId, api._id.toString(), routeRule._id.toString(), {
+          rateLimit: {
+            algorithm: "token-bucket",
+            capacity: 100,
+            refillRate: 10,
+            refillIntervalMs: 1_000,
+          },
+        }),
+      ).rejects.toMatchObject({
+        message: "Token bucket rate limiting requires a Pro plan.",
+        statusCode: 403,
+      });
+    });
   });
 
   describe("delete", () => {
@@ -235,6 +342,7 @@ describe("RouteRuleService integration", () => {
       const api = await Api.create({
         userId: new Types.ObjectId(userId),
         ...buildApiPayload(),
+        ...buildApiKeyFields(),
       });
 
       const routeRule = await service.create(
@@ -260,6 +368,7 @@ describe("RouteRuleService integration", () => {
       const api = await Api.create({
         userId: new Types.ObjectId(otherUserId),
         ...buildApiPayload(),
+        ...buildApiKeyFields(),
       });
 
       const routeRule = await RouteRule.create({

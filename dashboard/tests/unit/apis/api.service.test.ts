@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { connectDB } from "@/lib/db";
 import AppError from "@/infrastructure/errors/app-error";
-import { ApiService } from "@/modules/apis/api.service";
 import { Api } from "@/modules/apis/api.model";
+import { ApiService } from "@/modules/apis/api.service";
+import { User } from "@/modules/users/user.model";
 
 vi.mock("@/lib/db", () => ({
   connectDB: vi.fn(),
@@ -25,6 +26,12 @@ vi.mock("@/modules/apis/api.model", () => ({
   },
 }));
 
+vi.mock("@/modules/users/user.model", () => ({
+  User: {
+    findById: vi.fn(),
+  },
+}));
+
 describe("ApiService", () => {
   const service = new ApiService();
 
@@ -33,6 +40,12 @@ describe("ApiService", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    vi.mocked(User.findById).mockReturnValue({
+      select: vi.fn().mockResolvedValue({
+        plan: "free",
+      }),
+    } as never);
   });
 
   describe("create", () => {
@@ -69,6 +82,8 @@ describe("ApiService", () => {
 
       expect(connectDB).toHaveBeenCalledOnce();
 
+      expect(User.findById).toHaveBeenCalledWith(userId);
+
       expect(Api.create).toHaveBeenCalledWith({
         userId: new Types.ObjectId(userId),
         ...data,
@@ -102,6 +117,37 @@ describe("ApiService", () => {
       vi.mocked(Api.create).mockRejectedValue(error);
 
       await expect(service.create(userId, data)).rejects.toBe(error);
+    });
+
+    it("rejects token-bucket for free users", async () => {
+      const tokenBucketData = {
+        ...data,
+        rateLimit: {
+          enabled: true,
+          algorithm: "token-bucket" as const,
+          capacity: 100,
+          refillRate: 10,
+          refillIntervalMs: 1_000,
+        },
+      };
+
+      await expect(service.create(userId, tokenBucketData)).rejects.toEqual(
+        new AppError("Token bucket rate limiting requires a Pro plan.", 403),
+      );
+
+      expect(Api.create).not.toHaveBeenCalled();
+    });
+
+    it("throws not found when the user does not exist", async () => {
+      vi.mocked(User.findById).mockReturnValue({
+        select: vi.fn().mockResolvedValue(null),
+      } as never);
+
+      await expect(service.create(userId, data)).rejects.toEqual(
+        new AppError("User not found.", 404),
+      );
+
+      expect(Api.create).not.toHaveBeenCalled();
     });
   });
 
@@ -174,6 +220,68 @@ describe("ApiService", () => {
       const result = await service.update(userId, apiId, data);
 
       expect(connectDB).toHaveBeenCalledOnce();
+
+      expect(Api.findOneAndUpdate).toHaveBeenCalledWith(
+        {
+          _id: apiId,
+          userId,
+        },
+        {
+          $set: data,
+        },
+        {
+          returnDocument: "after",
+          runValidators: true,
+        },
+      );
+
+      expect(result).toBe(updatedApi);
+    });
+
+    it("rejects token-bucket updates for free users", async () => {
+      const data = {
+        rateLimit: {
+          enabled: true,
+          algorithm: "token-bucket" as const,
+          capacity: 100,
+          refillRate: 10,
+          refillIntervalMs: 1_000,
+        },
+      };
+
+      await expect(service.update(userId, apiId, data)).rejects.toEqual(
+        new AppError("Token bucket rate limiting requires a Pro plan.", 403),
+      );
+
+      expect(Api.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it("allows token-bucket updates for Pro users", async () => {
+      vi.mocked(User.findById).mockReturnValue({
+        select: vi.fn().mockResolvedValue({
+          plan: "pro",
+        }),
+      } as never);
+
+      const data = {
+        rateLimit: {
+          enabled: true,
+          algorithm: "token-bucket" as const,
+          capacity: 100,
+          refillRate: 10,
+          refillIntervalMs: 1_000,
+        },
+      };
+
+      const updatedApi = {
+        _id: new Types.ObjectId(apiId),
+        userId: new Types.ObjectId(userId),
+        ...data,
+      };
+
+      vi.mocked(Api.findOneAndUpdate).mockResolvedValue(updatedApi as never);
+
+      const result = await service.update(userId, apiId, data);
 
       expect(Api.findOneAndUpdate).toHaveBeenCalledWith(
         {

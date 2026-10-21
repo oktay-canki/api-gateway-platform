@@ -1,22 +1,22 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { HydratedDocument } from "mongoose";
+import type { HydratedDocument } from "mongoose";
 import { POST } from "@/app/api/apis/[apiId]/routes/route";
 import { Api } from "@/modules/apis/api.model";
 import { RouteRule } from "@/modules/route-rules/route-rule.model";
 import { User } from "@/modules/users/user.model";
-import { IUser } from "@/modules/users/user.schema";
+import type { IApiDocument } from "@/modules/apis/api.document";
+import type { IUserDocument } from "@/modules/users/user.document";
 import { resetAuthMock, setupAuthenticatedUser } from "../../helpers/auth";
-import { buildApiPayload } from "../../helpers/api";
+import { buildApiKeyFields, buildApiPayload } from "../../helpers/api";
 import {
   buildRouteRulePayload,
   createRouteRules,
 } from "../../helpers/route-rule";
 import { createJsonRequest } from "../../helpers/request";
-import { IApi } from "@/modules/apis/api.schema";
 
 describe("POST /api/apis/:apiId/routes", () => {
-  let user: HydratedDocument<IUser>;
-  let api: HydratedDocument<IApi>;
+  let user: HydratedDocument<IUserDocument>;
+  let api: HydratedDocument<IApiDocument>;
 
   beforeEach(async () => {
     await RouteRule.deleteMany({});
@@ -30,6 +30,7 @@ describe("POST /api/apis/:apiId/routes", () => {
     api = await Api.create({
       userId: user._id,
       ...buildApiPayload(),
+      ...buildApiKeyFields(),
     });
   });
 
@@ -39,7 +40,7 @@ describe("POST /api/apis/:apiId/routes", () => {
       {
         method: "POST",
         body: buildRouteRulePayload({
-          routePattern: "/users/*",
+          routePattern: "/users/*path",
           rateLimit: {
             algorithm: "sliding-window",
             maxRequests: 50,
@@ -60,7 +61,7 @@ describe("POST /api/apis/:apiId/routes", () => {
     const body = await response.json();
 
     expect(body).toMatchObject({
-      routePattern: "/users/*",
+      routePattern: "/users/*path",
       rateLimit: {
         algorithm: "sliding-window",
         maxRequests: 50,
@@ -76,13 +77,17 @@ describe("POST /api/apis/:apiId/routes", () => {
     });
   });
 
-  it("creates a route rule with token-bucket rate limit", async () => {
+  it("creates a route rule with token-bucket rate limit for Pro users", async () => {
+    await User.findByIdAndUpdate(user._id, {
+      plan: "pro",
+    });
+
     const request = createJsonRequest(
       `http://localhost/api/apis/${api._id}/routes`,
       {
         method: "POST",
         body: buildRouteRulePayload({
-          routePattern: "/products/*",
+          routePattern: "/products/*path",
           rateLimit: {
             algorithm: "token-bucket",
             capacity: 100,
@@ -104,7 +109,7 @@ describe("POST /api/apis/:apiId/routes", () => {
     const body = await response.json();
 
     expect(body).toMatchObject({
-      routePattern: "/products/*",
+      routePattern: "/products/*path",
       rateLimit: {
         algorithm: "token-bucket",
         capacity: 100,
@@ -112,6 +117,40 @@ describe("POST /api/apis/:apiId/routes", () => {
         refillIntervalMs: 1_000,
       },
     });
+  });
+
+  it("rejects token-bucket rate limit for Free users", async () => {
+    const request = createJsonRequest(
+      `http://localhost/api/apis/${api._id}/routes`,
+      {
+        method: "POST",
+        body: buildRouteRulePayload({
+          routePattern: "/products/*path",
+          rateLimit: {
+            algorithm: "token-bucket",
+            capacity: 100,
+            refillRate: 10,
+            refillIntervalMs: 1_000,
+          },
+        }),
+      },
+    );
+
+    const response = await POST(request, {
+      params: Promise.resolve({
+        apiId: api._id.toString(),
+      }),
+    });
+
+    expect(response.status).toBe(403);
+
+    const body = await response.json();
+
+    expect(body.message).toBe(
+      "Token bucket rate limiting requires a Pro plan.",
+    );
+
+    expect(await RouteRule.countDocuments()).toBe(0);
   });
 
   it("creates a route rule without optional configuration", async () => {
@@ -198,7 +237,7 @@ describe("POST /api/apis/:apiId/routes", () => {
     await createRouteRules([
       {
         apiId: api._id,
-        routePattern: "/users/*",
+        routePattern: "/users/*path",
       },
     ]);
 
@@ -207,7 +246,7 @@ describe("POST /api/apis/:apiId/routes", () => {
       {
         method: "POST",
         body: buildRouteRulePayload({
-          routePattern: "/users/*",
+          routePattern: "/users/*path",
         }),
       },
     );

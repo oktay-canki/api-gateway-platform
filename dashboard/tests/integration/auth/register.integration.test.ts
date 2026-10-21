@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-
-import { User } from "@/modules/users/user.model";
 import { POST } from "@/app/api/auth/register/route";
+import { User } from "@/modules/users/user.model";
 import { createJsonRequest } from "../../helpers/request";
 
 describe("POST /api/auth/register", () => {
@@ -16,6 +15,7 @@ describe("POST /api/auth/register", () => {
         name: "John Doe",
         email: "john@example.com",
         password: "password123",
+        plan: "pro",
       },
     });
 
@@ -28,6 +28,7 @@ describe("POST /api/auth/register", () => {
     expect(body).toMatchObject({
       name: "John Doe",
       email: "john@example.com",
+      plan: "pro",
     });
 
     expect(body.passwordHash).toBeUndefined();
@@ -39,6 +40,7 @@ describe("POST /api/auth/register", () => {
     expect(user).not.toBeNull();
     expect(user!.name).toBe("John Doe");
     expect(user!.email).toBe("john@example.com");
+    expect(user!.plan).toBe("pro");
     expect(user!.passwordHash).not.toBe("password123");
   });
 
@@ -49,6 +51,7 @@ describe("POST /api/auth/register", () => {
         name: "",
         email: "invalid-email",
         password: "short",
+        plan: "free",
       },
     });
 
@@ -72,6 +75,7 @@ describe("POST /api/auth/register", () => {
       name: "John Doe",
       email: "john@example.com",
       password: "password123",
+      plan: "free",
     };
 
     const firstRequest = createJsonRequest(
@@ -110,5 +114,31 @@ describe("POST /api/auth/register", () => {
         email: data.email,
       }),
     ).toBe(1);
+  });
+
+  it("rejects an invalid plan", async () => {
+    const request = createJsonRequest("http://localhost/api/auth/register", {
+      method: "POST",
+      body: {
+        name: "John Doe",
+        email: "john@example.com",
+        password: "password123",
+        plan: "enterprise",
+      },
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+
+    const body = await response.json();
+
+    expect(body).toHaveProperty("message");
+
+    expect(
+      await User.countDocuments({
+        email: "john@example.com",
+      }),
+    ).toBe(0);
   });
 });

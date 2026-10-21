@@ -1,17 +1,19 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { HydratedDocument } from "mongoose";
+import type { HydratedDocument } from "mongoose";
+
 import { GET } from "@/app/api/apis/[apiId]/route";
 import { Api } from "@/modules/apis/api.model";
+import type { IApiDocument } from "@/modules/apis/api.document";
+import type { IUserDocument } from "@/modules/users/user.document";
 import { User } from "@/modules/users/user.model";
-import { IUser } from "@/modules/users/user.schema";
-import { IApi } from "@/modules/apis/api.schema";
 import { resetAuthMock, setupAuthenticatedUser } from "../../helpers/auth";
-import { createJsonRequest } from "../../helpers/request";
 import { createApis } from "../../helpers/api";
+import { createJsonRequest } from "../../helpers/request";
+import { createUser } from "../../helpers/user";
 
 describe("GET /api/apis/:apiId", () => {
-  let user: HydratedDocument<IUser>;
-  let api: HydratedDocument<IApi>;
+  let user: HydratedDocument<IUserDocument>;
+  let api: HydratedDocument<IApiDocument>;
 
   beforeEach(async () => {
     await Api.deleteMany({});
@@ -68,12 +70,7 @@ describe("GET /api/apis/:apiId", () => {
   });
 
   it("returns not found for an API belonging to another user", async () => {
-    const otherUser = await User.create({
-      name: "Other User",
-      email: "other@example.com",
-      passwordHash: "password",
-      plan: "free",
-    });
+    const otherUser = await createUser();
 
     const [otherApi] = await createApis([
       {
