@@ -274,7 +274,6 @@ Possible future improvements include:
 - improved upstream error classification
 - additional rate-limiting strategies
 - more extensive gateway integration tests
-- dashboard UI for API and route management
 - support for distributed gateway instances and coordinated configuration updates
 
 These are intentionally left outside the current implementation so the project can remain focused on its core gateway functionality.
